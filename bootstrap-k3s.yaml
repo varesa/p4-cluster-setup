@@ -1,0 +1,226 @@
+---
+
+- hosts: hypervisors
+
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+    - name: Create etcd certificate directory
+      file:
+        state: directory
+        path: /etc/pki/etcd
+    - name: Install tools
+      dnf:
+        state: installed
+        name:
+          - rsync
+          - tar
+          - gzip
+          - tcpdump
+          - telnet
+          - chrony
+
+    - name: Enable NTP
+      systemd:
+        name: chronyd
+        state: started
+        enabled: true
+
+- hosts: bootstrap
+
+  vars:
+    cfssl_version: "1.4.1"
+    cfssl_checksum_url: "https://github.com/cloudflare/cfssl/releases/download/v{{ cfssl_version }}/cfssl_{{ cfssl_version }}_checksums.txt"
+    cfssl_bin_directory: "/usr/local/bin"
+    cfssl_owner: "root"
+    cfssl_group: "root"
+    cfssl_os: "linux" # use "darwin" for MacOS X, "windows" for Windows
+    cfssl_arch: "amd64" # the only supported architecture at the moment
+
+    etcd_ca_path: /etc/pki/etcd-ca
+
+  tasks:
+    # Borrowed from https://github.com/githubixx/ansible-role-cfssl/blob/master/tasks/main.yml
+    - name: Downloading cfssl binaries
+      get_url:
+        url: "https://github.com/cloudflare/cfssl/releases/download/v{{ cfssl_version }}/{{ item }}_{{ cfssl_version }}_{{ cfssl_os }}_{{ cfssl_arch }}"
+        dest: "{{ cfssl_bin_directory }}/{{ item }}"
+        mode: 0755
+        owner: "{{ cfssl_owner }}"
+        group: "{{ cfssl_group }}"
+        checksum: "sha256:{{ cfssl_checksum_url }}"
+      with_items:
+        - cfssl
+        - cfssl-bundle
+        - cfssl-certinfo
+        - cfssl-newkey
+        - cfssl-scan
+        - cfssljson
+        - mkbundle
+        - multirootca
+      tags:
+        - cfssl
+
+    - name: Create etcd CA directory
+      file:
+        state: directory
+        path: "{{etcd_ca_path}}"
+
+    - name: Generate CA
+      shell:
+        chdir: "{{etcd_ca_path}}"
+        cmd: echo '{"CN":"CA","key":{"algo":"rsa","size":2048}}' | cfssl gencert -initca - | cfssljson -bare ca -
+        creates: "{{etcd_ca_path}}/ca.pem"
+
+    - name: Store CA config
+      copy:
+        content: '{"signing":{"default":{"expiry":"43800h","usages":["signing","key encipherment","server auth","client auth"]}}}'
+        dest: "{{etcd_ca_path}}/ca-config.json"
+
+    - name: Generate certificates
+      shell:
+        chdir: "{{etcd_ca_path}}"
+        cmd: >
+          echo '{"CN":"'{{ hostvars[item]['inventory_hostname'] }}'","hosts":[""],"key":{"algo":"rsa","size":2048}}' | 
+          cfssl gencert 
+          -config=ca-config.json -ca=ca.pem -ca-key=ca-key.pem 
+          -hostname={{ hostvars[item]['inventory_hostname'] }},{{ hostvars[item]['ansible_host'] }} - | 
+          cfssljson -bare {{ hostvars[item]['inventory_hostname'] }}
+        creates: "{{ item }}.pem"
+      loop: "{{groups['controlplane']}}"
+
+- hosts: controlplane
+  vars:
+    etcd_ca_path: /etc/pki/etcd-ca
+  tasks:
+    - name: Copy certificates
+      synchronize:
+        src: "{{ etcd_ca_path }}/{{ inventory_hostname }}.pem"
+        dest: "/etc/pki/etcd/"
+      delegate_to: "{{ groups['bootstrap'][0] }}"
+
+    - name: Copy keys
+      synchronize:
+        src: "{{ etcd_ca_path }}/{{ inventory_hostname }}-key.pem"
+        dest: "/etc/pki/etcd/"
+      delegate_to: "{{ groups['bootstrap'][0] }}"
+
+    - name: Copy CA cert
+      synchronize:
+        src: "{{ etcd_ca_path }}/ca.pem"
+        dest: "/etc/pki/etcd/"
+      delegate_to: "{{ groups['bootstrap'][0] }}"
+
+
+- hosts: controlplane
+  tags:
+    - etcd
+
+  vars:
+    etcd_version: "3.4.14"
+    etcd_bin_directory: "/usr/local/bin"
+    etcd_owner: "root"
+    etcd_group: "root"
+    etcd_os: "linux" 
+    etcd_arch: "amd64"
+    etcd_checksum: "f57141d45ceb727a84e2f0bcd0b98934ea2ad2b59009be90d901710861601651"
+
+    etcd_target: "/opt/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}"
+
+    etcd_ca_path: /etc/pki/etcd-ca
+
+  tasks:
+    - name: Test if etcd has already been installed
+      stat:
+        path: /opt/etcd
+      register: stat_etcd
+
+    - name: Downloading etcd binaries
+      get_url:
+        url: "https://storage.googleapis.com/etcd/v{{ etcd_version }}/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}.tar.gz"
+        dest: "/opt/"
+        mode: 0755
+        owner: "{{ etcd_owner }}"
+        group: "{{ etcd_group }}"
+        checksum: "sha256:{{ etcd_checksum }}"
+      when: stat_etcd['stat']['lnk_target'] != etcd_target
+
+    - name: Extract etcd
+      unarchive:
+        remote_src: true
+        src: "{{ etcd_target }}.tar.gz"
+        #src: /opt/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}.tar.gz
+        dest: /opt/
+        mode: 0755
+        owner: '{{ etcd_owner }}'
+        group: '{{ etcd_group }}'
+      when: stat_etcd['stat']['lnk_target'] != etcd_target
+
+    - name: Link latest etcd
+      file:
+        state: link
+        src: /opt/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}
+        dest: /opt/etcd
+      when: stat_etcd['stat']['lnk_target'] != etcd_target
+
+    - name: Remove archive
+      file:
+        state: absent
+        path: /opt/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}.tar.gz
+
+- hosts: bootstrap
+
+  tasks:
+    - name: Create etcd user
+      user:
+        name: etcd
+        state: present
+        create_home: true
+        home: "/var/lib/etcd"
+
+    - name: Ensure certificate access
+      file:
+        state: directory
+        path: "/etc/pki/etcd"
+        owner: etcd
+        recurse: true
+
+    - name: Create etcd.conf for bootstrap
+      template:
+        src: etcd-bootstrap.conf
+        dest: /etc/etcd.conf
+      register: etcd_config
+
+    - name: Create etcd.service
+      template:
+        src: etcd.service
+        dest: /etc/systemd/system/etcd.service
+      register: etcd_service
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+      when: etcd_service.changed
+
+    - name: Start etcd
+      systemd:
+        name: etcd.service
+        state: "{{ 'restarted' if etcd_service.changed or etcd_config.changed else 'started' }}"
+        enabled: true
+
+    - name: Install k3s
+      shell:
+        cmd: curl -sfL https://get.k3s.io | sh -
+        creates: /etc/systemd/system/k3s.service
+      environment:
+        K3S_DATASTORE_ENDPOINT: "https://{{ ansible_default_ipv4.address }}:2379"
+        K3S_DATASTORE_CAFILE: "/etc/pki/etcd/ca.pem"
+        K3S_DATASTORE_CERTFILE: "/etc/pki/etcd/{{ inventory_hostname }}.pem"
+        K3S_DATASTORE_KEYFILE: "/etc/pki/etcd/{{ inventory_hostname }}-key.pem"
+        K3S_TOKEN: "{{ cluster_secret }}"
+
+    - name: Ensure k3s is running and enabled
+      systemd:
+        name: k3s.service
+        state: started
+        enabled: true
