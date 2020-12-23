@@ -1,0 +1,15 @@
+[hypervisors]
+kvm01.p4.esav.fi ansible_host=10.4.0.31
+kvm02.p4.esav.fi ansible_host=10.4.0.32
+kvm03.p4.esav.fi ansible_host=10.4.0.33
+
+[controlplane]
+kvm0[1:3].p4.esav.fi
+
+[bootstrap]
+kvm02.p4.esav.fi
+
+[all:vars]
+ansible_user=root
+cluster_id=p4-controlplane-1
+cluster_secret=j3mgn2hu56tysvdnkj12

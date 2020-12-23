@@ -27,6 +27,26 @@
         state: started
         enabled: true
 
+    - name: Disable firewalld
+      systemd:
+        name: firewalld
+        state: stopped
+        enabled: false
+
+#    - name: Open firewall
+#      ansible.posix.firewalld:
+#        port: "{{ item }}"
+#        permanent: yes
+#        state: enabled
+#      loop:
+#        - 2379/tcp
+#        - 6443/tcp
+#      register: firewall
+#
+#    - name: Reload firewalld
+#      command: firewall-cmd --reload
+#      when: firewall.changed
+
 - hosts: bootstrap
 
   vars:
@@ -91,29 +111,6 @@
       loop: "{{groups['controlplane']}}"
 
 - hosts: controlplane
-  vars:
-    etcd_ca_path: /etc/pki/etcd-ca
-  tasks:
-    - name: Copy certificates
-      synchronize:
-        src: "{{ etcd_ca_path }}/{{ inventory_hostname }}.pem"
-        dest: "/etc/pki/etcd/"
-      delegate_to: "{{ groups['bootstrap'][0] }}"
-
-    - name: Copy keys
-      synchronize:
-        src: "{{ etcd_ca_path }}/{{ inventory_hostname }}-key.pem"
-        dest: "/etc/pki/etcd/"
-      delegate_to: "{{ groups['bootstrap'][0] }}"
-
-    - name: Copy CA cert
-      synchronize:
-        src: "{{ etcd_ca_path }}/ca.pem"
-        dest: "/etc/pki/etcd/"
-      delegate_to: "{{ groups['bootstrap'][0] }}"
-
-
-- hosts: controlplane
   tags:
     - etcd
 
@@ -169,9 +166,6 @@
         state: absent
         path: /opt/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}.tar.gz
 
-- hosts: bootstrap
-
-  tasks:
     - name: Create etcd user
       user:
         name: etcd
@@ -179,12 +173,27 @@
         create_home: true
         home: "/var/lib/etcd"
 
+    - name: Copy certificates
+      synchronize:
+        src: "{{ item }}"
+        dest: "/etc/pki/etcd/"
+        archive: false  # Do not overwrite permissions set later
+      delegate_to: "{{ groups['bootstrap'][0] }}"
+      loop:
+        - "{{ etcd_ca_path }}/{{ inventory_hostname }}.pem"
+        - "{{ etcd_ca_path }}/{{ inventory_hostname }}-key.pem"
+        - "{{ etcd_ca_path }}/ca.pem"
+
     - name: Ensure certificate access
       file:
         state: directory
         path: "/etc/pki/etcd"
         owner: etcd
         recurse: true
+
+
+- hosts: bootstrap
+  tasks:
 
     - name: Create etcd.conf for bootstrap
       template:
@@ -208,16 +217,21 @@
         state: "{{ 'restarted' if etcd_service.changed or etcd_config.changed else 'started' }}"
         enabled: true
 
+- hosts: controlplane
+  tasks:
+
     - name: Install k3s
       shell:
         cmd: curl -sfL https://get.k3s.io | sh -
         creates: /etc/systemd/system/k3s.service
       environment:
-        K3S_DATASTORE_ENDPOINT: "https://{{ ansible_default_ipv4.address }}:2379"
+        K3S_DATASTORE_ENDPOINT: "https://{{ hostvars[groups['bootstrap'][0]]['ansible_default_ipv4']['address'] }}:2379"
         K3S_DATASTORE_CAFILE: "/etc/pki/etcd/ca.pem"
         K3S_DATASTORE_CERTFILE: "/etc/pki/etcd/{{ inventory_hostname }}.pem"
         K3S_DATASTORE_KEYFILE: "/etc/pki/etcd/{{ inventory_hostname }}-key.pem"
         K3S_TOKEN: "{{ cluster_secret }}"
+        INSTALL_K3S_EXEC: "--cluster-cidr=100.96.0.0/16 --disable-network-policy --disable=traefik"
+        #INSTALL_K3S_EXEC: "--flannel-backend=none --cluster-cidr=100.96.0.0/16 --disable-network-policy --disable=traefik"
 
     - name: Ensure k3s is running and enabled
       systemd:
