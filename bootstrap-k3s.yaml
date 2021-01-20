@@ -141,7 +141,7 @@
         owner: "{{ etcd_owner }}"
         group: "{{ etcd_group }}"
         checksum: "sha256:{{ etcd_checksum }}"
-      when: stat_etcd['stat']['lnk_target'] != etcd_target
+      when: stat_etcd['stat']['exists'] == False or stat_etcd['stat']['lnk_target'] != etcd_target
 
     - name: Extract etcd
       unarchive:
@@ -152,14 +152,14 @@
         mode: 0755
         owner: '{{ etcd_owner }}'
         group: '{{ etcd_group }}'
-      when: stat_etcd['stat']['lnk_target'] != etcd_target
+      when: stat_etcd['stat']['exists'] == False or stat_etcd['stat']['lnk_target'] != etcd_target
 
     - name: Link latest etcd
       file:
         state: link
         src: /opt/etcd-v{{ etcd_version }}-{{ etcd_os }}-{{ etcd_arch }}
         dest: /opt/etcd
-      when: stat_etcd['stat']['lnk_target'] != etcd_target
+      when: stat_etcd['stat']['exists'] == False or stat_etcd['stat']['lnk_target'] != etcd_target
 
     - name: Remove archive
       file:
