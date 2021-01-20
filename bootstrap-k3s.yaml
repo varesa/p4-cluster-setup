@@ -191,16 +191,6 @@
         owner: etcd
         recurse: true
 
-
-- hosts: bootstrap
-  tasks:
-
-    - name: Create etcd.conf for bootstrap
-      template:
-        src: etcd-bootstrap.conf
-        dest: /etc/etcd.conf
-      register: etcd_config
-
     - name: Create etcd.service
       template:
         src: etcd.service
@@ -210,6 +200,15 @@
     - name: Reload systemd
       command: systemctl daemon-reload
       when: etcd_service.changed
+
+- hosts: bootstrap
+  tasks:
+
+    - name: Create etcd.conf for bootstrap
+      template:
+        src: etcd-bootstrap.conf
+        dest: /etc/etcd.conf
+      register: etcd_config
 
     - name: Start etcd
       systemd:
