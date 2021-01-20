@@ -1,0 +1,40 @@
+---
+
+- hosts: hypervisors
+
+  tasks:
+    - dnf:
+        name: centos-release-ceph-octopus
+        state: installed
+
+    - dnf:
+        name:
+          - podman
+          - cephadm
+          - ceph-common
+        state: installed
+
+- hosts: bootstrap
+  tasks:
+    - file:
+        path: /etc/ceph
+        state: directory
+
+    - command: cephadm bootstrap --mon-ip {{ ansible_storage.ipv4.address }}
+      args:
+        creates: /etc/ceph/ceph.conf
+
+- hosts: hypervisors
+  tasks:
+    - when: "'bootstrap' in group_names"
+      command: cat /etc/ceph/ceph.pub
+      register: ssh_pubkey
+      changed_when: false
+
+    - lineinfile:
+        path: /root/.ssh/authorized_keys
+        line: "{{ hostvars[groups.bootstrap[0]].ssh_pubkey.stdout }}"
+
+    - when: "'bootstrap' not in group_names"
+      command: ceph orch host add {{ ansible_hostname }}
+      delegate_to: "{{ groups.bootstrap[0] }}"
