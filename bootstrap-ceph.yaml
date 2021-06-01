@@ -12,6 +12,7 @@
           - podman
           - cephadm
           - ceph-common
+          - python3
         state: installed
 
 - hosts: bootstrap
