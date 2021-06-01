@@ -1,0 +1,14 @@
+---
+- hosts: all
+  tasks:
+  - copy:
+      content: |
+        /var/lib/containers/storage/overlay-containers/*/userdata/ctr.log {
+          rotate 7
+          daily
+          compress
+          missingok
+          delaycompress
+          copytruncate
+        }
+      dest: /etc/logrotate.d/podmanlog
