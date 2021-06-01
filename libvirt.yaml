@@ -1,0 +1,21 @@
+---
+- hosts: hypervisors
+  tasks:
+
+  - name: Install repos 
+    dnf:
+      name:
+        - centos-release-advanced-virtualization.noarch
+
+  - name: Install virtualization
+    dnf:
+      name:
+      - libvirt-admin.x86_64
+      - libvirt-client.x86_64
+      - libvirt-daemon-kvm.x86_64
+
+  - systemd:
+      name: libvirtd
+      state: started
+      enabled: true
+
