@@ -229,8 +229,7 @@
         K3S_DATASTORE_CERTFILE: "/etc/pki/etcd/{{ inventory_hostname }}.pem"
         K3S_DATASTORE_KEYFILE: "/etc/pki/etcd/{{ inventory_hostname }}-key.pem"
         K3S_TOKEN: "{{ cluster_secret }}"
-        INSTALL_K3S_EXEC: "--cluster-cidr=100.96.0.0/16 --disable-network-policy --disable=traefik"
-        #INSTALL_K3S_EXEC: "--flannel-backend=none --cluster-cidr=100.96.0.0/16 --disable-network-policy --disable=traefik"
+        INSTALL_K3S_EXEC: "--flannel-backend=none --cluster-cidr=100.96.0.0/16 --disable-network-policy --disable=traefik"
 
     - name: Ensure k3s is running and enabled
       systemd:
