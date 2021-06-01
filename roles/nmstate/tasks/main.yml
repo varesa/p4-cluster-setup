@@ -1,0 +1,16 @@
+- community.general.copr:
+    name: varesa/nmstate-git
+    state: enabled
+
+- community.general.copr:
+    name: nmstate/nispor
+    state: enabled
+
+- dnf:
+    name: nmstate
+    state: installed
+
+- template:
+    src: nmstate.yml.j2
+    dest: /etc/nmstate.yml
+  notify: nmstatectl set

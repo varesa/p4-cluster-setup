@@ -1,0 +1,4 @@
+- name: restart frr
+  systemd:
+    name: frr.service
+    state: restarted

@@ -1,0 +1,20 @@
+- dnf:
+    name: frr
+    state: installed
+
+- template:
+    dest: /etc/frr/bgpd.conf
+    src: frr-bgpd.conf.j2
+  notify: restart frr
+
+- template:
+    dest: /etc/frr/zebra.conf
+    src: frr-zebra.conf.j2
+  vars:
+    component: zebra
+  notify: restart frr
+
+- systemd:
+    name: frr.service
+    state: started
+    enabled: true

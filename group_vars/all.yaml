@@ -1,0 +1,22 @@
+network_segments:
+  - name: internet
+    vni: 50
+  - name: management
+    vni: 2100
+    prefix_base: 10.4.0.30
+  - name: storage
+    vni: 2102
+    prefix_base: 10.4.2.30
+
+underlay_prefixes:
+  - base: 10.4.51.0
+  - base: 10.4.52.0
+
+prefix_loopbacks: 10.4.3
+
+dns_resolvers:
+  - 10.10.10.10
+  - 1.1.1.1
+
+default_route: 10.4.0.1
+default_interface: managementx

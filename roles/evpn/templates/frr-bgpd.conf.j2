@@ -1,0 +1,43 @@
+frr version 7.5
+frr defaults traditional
+!
+hostname {{ inventory_hostname_short }}
+log file /var/log/frr/debug.log
+!
+router bgp {{ asn }}
+ no bgp ebgp-requires-policy
+ no bgp network import-check
+ neighbor overlay peer-group
+ neighbor overlay remote-as 65400
+ neighbor overlay ebgp-multihop 2
+ neighbor overlay capability extended-nexthop
+ neighbor underlay peer-group
+ neighbor underlay remote-as 65400
+ neighbor underlay capability extended-nexthop
+ neighbor 10.4.3.100 peer-group overlay
+ neighbor {{ underlay_prefixes[0].base | ipmath((host_id-1)*4 + 1) }} peer-group underlay
+ neighbor {{ underlay_prefixes[1].base | ipmath((host_id-1)*4 + 1) }} peer-group underlay
+ !
+ address-family ipv4 unicast
+  redistribute connected
+  no neighbor overlay activate
+  neighbor underlay route-map LOOPBACKS out
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor overlay activate
+  advertise-all-vni
+{% for segment in network_segments %}
+  vni {{ segment.vni }}
+   route-target import 65400:1
+   route-target export 65400:1
+  exit-vni
+{% endfor %}
+  advertise-default-gw
+ exit-address-family
+!
+{% include "frr-policy.j2" %}
+!
+line vty
+!
+
