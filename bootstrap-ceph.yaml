@@ -1,10 +1,11 @@
 ---
 
 - hosts: hypervisors
-
+  tags:
+  - install
   tasks:
     - dnf:
-        name: centos-release-ceph-octopus
+        name: centos-release-ceph-pacific
         state: installed
 
     - dnf:
@@ -14,6 +15,29 @@
           - ceph-common
           - python3
         state: installed
+
+    - name: Create Ceph LV
+      community.general.lvol:
+        vg: cl
+        lv: ceph
+        size: 10g
+
+    - name: Format Ceph LV
+      community.general.filesystem:
+        fstype: xfs
+        dev: /dev/mapper/cl-ceph
+
+    - name: Create ceph mountpoint
+      file:
+        path: /var/lib/ceph
+        state: directory
+
+    - name: Mount Ceph LV
+      ansible.posix.mount:
+        path: /var/lib/ceph
+        src: /dev/mapper/cl-ceph
+        fstype: xfs
+        state: mounted
 
 - hosts: bootstrap
   tasks:
