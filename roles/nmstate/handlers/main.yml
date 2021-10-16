@@ -1,2 +1,0 @@
-- name: nmstatectl set
-  command: "nmstatectl set /etc/nmstate.yml"

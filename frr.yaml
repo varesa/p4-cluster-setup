@@ -1,7 +1,0 @@
----
-- hosts: hypervisors
-  tasks:
-  - dnf:
-      name: frr
-      state: installed
-
