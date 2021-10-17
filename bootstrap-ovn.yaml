@@ -5,25 +5,30 @@
   tasks:
 
     - dnf:
+        name: centos-release-nfv-openvswitch
+        state: installed
+
+    - dnf:
         name:
-          - ovn2.13
-          - ovn2.13-central
-          - ovn2.13-host
+          - openvswitch2.15
+          - ovn-2021
+          - ovn-2021-central
+          - ovn-2021-host
         state: installed
 
     - set_fact:
-        nb_addr: "{{ play_hosts | map('extract', hostvars, ['ansible_management', 'ipv4', 'address']) | map('regex_replace', '^(.*)$', 'tcp:\\1:6641') | join(',')}}"
-        sb_addr: "{{ play_hosts | map('extract', hostvars, ['ansible_management', 'ipv4', 'address']) | map('regex_replace', '^(.*)$', 'tcp:\\1:6642') | join(',')}}"
+        nb_addr: "{{ play_hosts | map('extract', hostvars, ['ansible_dummy0', 'ipv4', 'address']) | map('regex_replace', '^(.*)$', 'tcp:\\1:6641') | join(',')}}"
+        sb_addr: "{{ play_hosts | map('extract', hostvars, ['ansible_dummy0', 'ipv4', 'address']) | map('regex_replace', '^(.*)$', 'tcp:\\1:6642') | join(',')}}"
 
 #    - command:
 #        argv:
 #          - /usr/share/ovn/scripts/ovn-ctl
-#          - --db-nb-addr={{ansible_management.ipv4.address}}
-#          - --db-sb-addr={{ansible_management.ipv4.address}}
+#          - --db-nb-addr={{ansible_dummy0.ipv4.address}}
+#          - --db-sb-addr={{ansible_dummy0.ipv4.address}}
 #          - --db-nb-create-insecure-remote=yes
 #          - --db-sb-create-insecure-remote=yes
-#          - --db-nb-cluster-local-addr={{ansible_management.ipv4.address}}
-#          - --db-sb-cluster-local-addr={{ansible_management.ipv4.address}}
+#          - --db-nb-cluster-local-addr={{ansible_dummy0.ipv4.address}}
+#          - --db-sb-cluster-local-addr={{ansible_dummy0.ipv4.address}}
 #          - --ovn-northd-nb-db={{ nb_addr }}
 #          - --ovn-northd-sb-db={{ sb_addr }}
 #          - start_northd
@@ -33,14 +38,14 @@
 #    - command:
 #        argv:
 #          - /usr/share/ovn/scripts/ovn-ctl
-#          - --db-nb-addr={{ansible_management.ipv4.address}}
-#          - --db-sb-addr={{ansible_management.ipv4.address}}
+#          - --db-nb-addr={{ansible_dummy0.ipv4.address}}
+#          - --db-sb-addr={{ansible_dummy0.ipv4.address}}
 #          - --db-nb-create-insecure-remote=yes
 #          - --db-sb-create-insecure-remote=yes
-#          - --db-nb-cluster-local-addr={{ansible_management.ipv4.address}}
-#          - --db-sb-cluster-local-addr={{ansible_management.ipv4.address}}
-#          - --db-nb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_management.ipv4.address}}
-#          - --db-sb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_management.ipv4.address}}
+#          - --db-nb-cluster-local-addr={{ansible_dummy0.ipv4.address}}
+#          - --db-sb-cluster-local-addr={{ansible_dummy0.ipv4.address}}
+#          - --db-nb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_dummy0.ipv4.address}}
+#          - --db-sb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_dummy0.ipv4.address}}
 #          - --ovn-northd-nb-db={{ nb_addr }}
 #          - --ovn-northd-sb-db={{ sb_addr }}
 #          - start_northd
@@ -49,20 +54,20 @@
 
     - set_fact:
         ovn_northd_args: >-
-          --db-nb-addr={{ansible_management.ipv4.address}}
-          --db-sb-addr={{ansible_management.ipv4.address}}
+          --db-nb-addr={{ansible_dummy0.ipv4.address}}
+          --db-sb-addr={{ansible_dummy0.ipv4.address}}
           --db-nb-create-insecure-remote=yes
           --db-sb-create-insecure-remote=yes
-          --db-nb-cluster-local-addr={{ansible_management.ipv4.address}}
-          --db-sb-cluster-local-addr={{ansible_management.ipv4.address}}
+          --db-nb-cluster-local-addr={{ansible_dummy0.ipv4.address}}
+          --db-sb-cluster-local-addr={{ansible_dummy0.ipv4.address}}
           --ovn-northd-nb-db={{ nb_addr }}
           --ovn-northd-sb-db={{ sb_addr }}
         ovn_remote_addr: ""
 
     - set_fact:
         ovn_remote_addr: >-
-          --db-nb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_management.ipv4.address}}
-          --db-sb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_management.ipv4.address}}
+          --db-nb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_dummy0.ipv4.address}}
+          --db-sb-cluster-remote-addr={{hostvars[play_hosts[0]].ansible_dummy0.ipv4.address}}
       when: inventory_hostname != play_hosts[0]
 
     - copy:
@@ -70,6 +75,10 @@
         content: |
           OVN_NORTHD_OPTS="{{ ovn_northd_args }} {{ ovn_remote_addr }}"
 
+    - systemd:
+        name: openvswitch
+        state: started
+        enabled: true
 
     - systemd:
         name: ovn-northd
@@ -81,7 +90,7 @@
         external-ids:system-id={{inventory_hostname}}
         external-ids:ovn-remote={{sb_addr}}
         external-ids:ovn-encap-type=geneve
-        external-ids:ovn-encap-ip={{ansible_management.ipv4.address}}
+        external-ids:ovn-encap-ip={{ansible_dummy0.ipv4.address}}
 
     - systemd:
         name: ovn-controller
