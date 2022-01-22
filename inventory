@@ -12,4 +12,4 @@ kvm02.p4.esav.fi
 [all:vars]
 ansible_user=root
 cluster_id=p4-controlplane-1
-cluster_secret=j3mgn2hu56tysvdnkj12
+#cluster_secret=<insert to group_vars/all/secrets.yaml>
